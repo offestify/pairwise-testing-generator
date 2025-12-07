@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pairwise Test Generator</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        const PairwiseGenerator = () => {
+            const [parameters, setParameters] = useState([
+                { id: 1, name: 'Browser', values: ['Chrome', 'Firefox', 'Safari'] },
+                { id: 2, name: 'OS', values: ['Windows', 'macOS', 'Linux'] }
+            ]);
+            const [testCases, setTestCases] = useState([]);
+            const [nextId, setNextId] = useState(3);
+
+            const generatePairwise = () => {
+                if (parameters.length < 2 || parameters.some(p => p.values.length < 2)) {
+                    alert('Need at least 2 parameters with 2+ values each');
+                    return;
+                }
+
+                const allPairs = new Set();
+                const coveredPairs = new Set();
+                const cases = [];
+
+                for (let i = 0; i < parameters.length; i++) {
+                    for (let j = i + 1; j < parameters.length; j++) {
+                        for (const val1 of parameters[i].values) {
+                            for (const val2 of parameters[j].values) {
+                                allPairs.add(`${i}-${val1}|${j}-${val2}`);
+                            }
+                        }
+                    }
+                }
+
+                while (coveredPairs.size < allPairs.size) {
+                    let bestCase = null;
+                    let bestCoverage = 0;
+
+                    const generateCombination = (index, current) => {
+                        if (index === parameters.length) {
+                            const newPairs = new Set();
+                            
+                            for (let i = 0; i < current.length; i++) {
+                                for (let j = i + 1; j < current.length; j++) {
+                                    const pairKey = `${i}-${current[i]}|${j}-${current[j]}`;
+                                    if (allPairs.has(pairKey) && !coveredPairs.has(pairKey)) {
+                                        newPairs.add(pairKey);
+                                    }
+                                }
+                            }
+
+                            if (newPairs.size > bestCoverage) {
+                                bestCoverage = newPairs.size;
+                                bestCase = { values: [...current], newPairs };
+                            }
+                            return;
+                        }
+
+                        for (const value of parameters[index].values) {
+                            generateCombination(index + 1, [...current, value]);
+                        }
+                    };
+
+                    generateCombination(0, []);
+
+                    if (bestCase) {
+                        cases.push(bestCase.values);
+                        bestCase.newPairs.forEach(pair => coveredPairs.add(pair));
+                    } else {
+                        break;
+                    }
+                }
+
+                setTestCases(cases);
+            };
+
+            const addParameter = () => {
+                setParameters([...parameters, { 
+                    id: nextId, 
+                    name: `Parameter ${nextId}`, 
+                    values: ['Value1', 'Value2'] 
+                }]);
+                setNextId(nextId + 1);
+            };
+
+            const removeParameter = (id) => {
+                setParameters(parameters.filter(p => p.id !== id));
+                setTestCases([]);
+            };
+
+            const updateParameterName = (id, name) => {
+                setParameters(parameters.map(p => 
+                    p.id === id ? { ...p, name } : p
+                ));
+            };
+
+            const addValue = (parameterId) => {
+                setParameters(parameters.map(p => 
+                    p.id === parameterId 
+                        ? { ...p, values: [...p.values, `Value${p.values.length + 1}`] }
+                        : p
+                ));
+            };
+
+            const removeValue = (parameterId, valueIndex) => {
+                setParameters(parameters.map(p => 
+                    p.id === parameterId 
+                        ? { ...p, values: p.values.filter((_, i) => i !== valueIndex) }
+                        : p
+                ));
+            };
+
+            const updateValue = (parameterId, valueIndex, newValue) => {
+                setParameters(parameters.map(p => 
+                    p.id === parameterId 
+                        ? { ...p, values: p.values.map((v, i) => i === valueIndex ? newValue : v) }
+                        : p
+                ));
+            };
+
+            const loadPreset = (preset) => {
+                const presets = {
+                    browser: [
+                        { id: 1, name: 'Browser', values: ['Chrome', 'Firefox', 'Safari', 'Edge'] },
+                        { id: 2, name: 'OS', values: ['Windows', 'macOS', 'Linux'] },
+                        { id: 3, name: 'Resolution', values: ['1920x1080', '1366x768', '2560x1440'] }
+                    ],
+                    mobile: [
+                        { id: 1, name: 'Platform', values: ['iOS', 'Android'] },
+                        { id: 2, name: 'Version', values: ['14', '15', '16'] },
+                        { id: 3, name: 'Device', values: ['Phone', 'Tablet'] }
+                    ],
+                    form: [
+                        { id: 1, name: 'Email', values: ['Valid', 'Invalid', 'Empty'] },
+                        { id: 2, name: 'Password', values: ['Strong', 'Weak', 'Empty'] },
+                        { id: 3, name: 'Age', values: ['Under 18', '18-65', 'Over 65'] }
+                    ]
+                };
+                setParameters(presets[preset]);
+                setTestCases([]);
+                setNextId(4);
+            };
+
+            const exportCSV = () => {
+                if (testCases.length === 0) return;
+
+                let csv = parameters.map(p => p.name).join(',') + '\n';
+                testCases.forEach(tc => {
+                    csv += tc.join(',') + '\n';
+                });
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'pairwise-tests.csv';
+                a.click();
+            };
+
+            const copyToClipboard = () => {
+                if (testCases.length === 0) return;
+
+                let text = parameters.map(p => p.name).join('\t') + '\n';
+                testCases.forEach(tc => {
+                    text += tc.join('\t') + '\n';
+                });
+
+                navigator.clipboard.writeText(text);
+                alert('Copied to clipboard');
+            };
+
+            const totalCombinations = parameters.reduce((acc, p) => acc * p.values.length, 1);
+            const savings = testCases.length > 0 
+                ? Math.round((1 - testCases.length / totalCombinations) * 100)
+                : 0;
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+                    <div className="max-w-7xl mx-auto">
+                        <div className="text-center mb-8">
+                            <h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-3">
+                                Pairwise Testing Generator
+                            </h1>
+                            <p className="text-gray-600">Create optimal test case sets with minimal effort</p>
+                        </div>
+
+                        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+                            <h3 className="font-semibold text-gray-700 mb-3">Quick Start Examples:</h3>
+                            <div className="flex gap-3 flex-wrap">
+                                <button
+                                    onClick={() => loadPreset('browser')}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                                >
+                                    Cross-browser Testing
+                                </button>
+                                <button
+                                    onClick={() => loadPreset('mobile')}
+                                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+                                >
+                                    Mobile Platforms
+                                </button>
+                                <button
+                                    onClick={() => loadPreset('form')}
+                                    className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition"
+                                >
+                                    Form Validation
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="lg:col-span-1">
+                                <div className="bg-white rounded-lg shadow-md p-6">
+                                    <h2 className="text-xl font-semibold text-gray-800 mb-4">Parameters</h2>
+                                    
+                                    <div className="space-y-4 mb-6">
+                                        {parameters.map((param) => (
+                                            <div key={param.id} className="border border-gray-200 rounded-lg p-4">
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <input
+                                                        type="text"
+                                                        value={param.name}
+                                                        onChange={(e) => updateParameterName(param.id, e.target.value)}
+                                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                                    />
+                                                    <button
+                                                        onClick={() => removeParameter(param.id)}
+                                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                                
+                                                <div className="space-y-2">
+                                                    {param.values.map((value, idx) => (
+                                                        <div key={idx} className="flex items-center gap-2">
+                                                            <span className="text-gray-500">•</span>
+                                                            <input
+                                                                type="text"
+                                                                value={value}
+                                                                onChange={(e) => updateValue(param.id, idx, e.target.value)}
+                                                                className="flex-1 px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                                            />
+                                                            {param.values.length > 2 && (
+                                                                <button
+                                                                    onClick={() => removeValue(param.id, idx)}
+                                                                    className="text-red-400 hover:text-red-600"
+                                                                >
+                                                                    ×
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                    <button
+                                                        onClick={() => addValue(param.id)}
+                                                        className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                                                    >
+                                                        + Add value
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <button
+                                        onClick={addParameter}
+                                        className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-indigo-400 hover:text-indigo-600 transition flex items-center justify-center gap-2"
+                                    >
+                                        + Add Parameter
+                                    </button>
+
+                                    <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                                        <h3 className="font-semibold text-gray-700 mb-2">Statistics</h3>
+                                        <div className="space-y-1 text-sm">
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-600">Parameters:</span>
+                                                <span className="font-medium">{parameters.length}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-600">Full coverage:</span>
+                                                <span className="font-medium">{totalCombinations} tests</span>
+                                            </div>
+                                            {testCases.length > 0 && (
+                                                <>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-600">Pairwise:</span>
+                                                        <span className="font-medium text-green-600">{testCases.length} tests</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-600">Reduction:</span>
+                                                        <span className="font-medium text-indigo-600">{savings}%</span>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={generatePairwise}
+                                        className="w-full mt-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
+                                    >
+                                        Generate Test Cases
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-2">
+                                <div className="bg-white rounded-lg shadow-md p-6">
+                                    {testCases.length === 0 ? (
+                                        <div className="text-center py-20 text-gray-400">
+                                            <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                            </svg>
+                                            <p className="text-lg">Configure parameters and click "Generate Test Cases"</p>
+                                            <p className="text-sm mt-2">or try one of the quick start examples above</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h2 className="text-xl font-semibold text-gray-800">
+                                                    Generated {testCases.length} test cases
+                                                </h2>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={copyToClipboard}
+                                                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2"
+                                                    >
+                                                        Copy
+                                                    </button>
+                                                    <button
+                                                        onClick={exportCSV}
+                                                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
+                                                    >
+                                                        Export CSV
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full border-collapse">
+                                                    <thead>
+                                                        <tr className="bg-gray-50">
+                                                            <th className="border border-gray-300 px-4 py-2 text-left font-semibold text-gray-700">
+                                                                #
+                                                            </th>
+                                                            {parameters.map((param) => (
+                                                                <th
+                                                                    key={param.id}
+                                                                    className="border border-gray-300 px-4 py-2 text-left font-semibold text-gray-700"
+                                                                >
+                                                                    {param.name}
+                                                                </th>
+                                                            ))}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {testCases.map((testCase, idx) => (
+                                                            <tr key={idx} className="hover:bg-blue-50 transition">
+                                                                <td className="border border-gray-300 px-4 py-2 text-gray-600">
+                                                                    {idx + 1}
+                                                                </td>
+                                                                {testCase.map((value, vIdx) => (
+                                                                    <td
+                                                                        key={vIdx}
+                                                                        className="border border-gray-300 px-4 py-2"
+                                                                    >
+                                                                        {value}
+                                                                    </td>
+                                                                ))}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="text-green-600 text-xl">ℹ</div>
+                                                    <div>
+                                                        <h3 className="font-semibold text-green-800 mb-1">
+                                                            Coverage Analysis
+                                                        </h3>
+                                                        <p className="text-sm text-green-700">
+                                                            These {testCases.length} test cases cover all possible pair combinations of parameter values.
+                                                            Instead of {totalCombinations} tests (full coverage), you only need {testCases.length} — 
+                                                            saving {savings}% of testing time while maintaining approximately 90-95% defect detection rate.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                                                <h3 className="font-semibold text-gray-700 mb-3">Method Comparison</h3>
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <div className="flex justify-between text-sm mb-1">
+                                                            <span>Full coverage</span>
+                                                            <span className="font-medium">{totalCombinations} tests</span>
+                                                        </div>
+                                                        <div className="h-8 bg-red-200 rounded-lg relative">
+                                                            <div className="absolute inset-0 flex items-center justify-center text-sm font-medium text-red-800">
+                                                                100%
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex justify-between text-sm mb-1">
+                                                            <span>Pairwise (your result)</span>
+                                                            <span className="font-medium text-green-600">{testCases.length} tests</span>
+                                                        </div>
+                                                        <div className="h-8 bg-green-200 rounded-lg relative" style={{ width: `${(testCases.length / totalCombinations) * 100}%` }}>
+                                                            <div className="absolute inset-0 flex items-center justify-center text-sm font-medium text-green-800 whitespace-nowrap">
+                                                                {Math.round((testCases.length / totalCombinations) * 100)}%
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 text-center text-gray-600 text-sm">
+                            <p>Pairwise Testing covers approximately 90-95% of bugs with significant time savings</p>
+                            <p className="mt-1">Based on the principle that most defects are caused by interactions between two parameters</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<PairwiseGenerator />, document.getElementById('root'));
+    </script>
+</body>
+</html>
